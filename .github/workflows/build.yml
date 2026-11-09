@@ -1,0 +1,34 @@
+name: build
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - name: Publish (small, needs .NET 8 Desktop Runtime)
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o out/small
+      - name: Publish (self-contained, runs anywhere)
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o out/full
+      - name: Rename
+        shell: pwsh
+        run: |
+          Move-Item out/small/LiteBrowser.exe out/LiteBrowser.exe
+          Move-Item out/full/LiteBrowser.exe out/LiteBrowser-standalone.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiteBrowser-win-x64
+          path: out/*.exe
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>$null
+          gh release create latest out/LiteBrowser.exe out/LiteBrowser-standalone.exe --title "Latest build" --notes "Automated build of main."
